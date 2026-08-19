@@ -1,5 +1,15 @@
 # dsh-pet 🐾
 
+> 🚧 **维护状态说明**
+>
+> 最近在做**素材链的视频背景去除与画质优化**，此项目将**暂时放缓更新**（源码/插件可能一段时间不推送）。
+>
+> - ✅ 现有版本（npm `dsh-pet`）仍可正常安装使用，不受影响
+> - 💬 遇到的 bug 或建议，欢迎照常开 [Issue](https://github.com/PC2005-cloud/dsh-pet/issues)，我会回复
+> - 🕒 素材优化完成并验证后，我会继续维护并发布新版本
+>
+> 感谢大家的 star 和支持 ❤️
+
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
