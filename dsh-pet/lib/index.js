@@ -23,7 +23,7 @@
  *
  * ============================================================================
  */
-import { createReadStream, existsSync } from 'node:fs';
+import { createReadStream, existsSync, appendFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +44,9 @@ const ROUTE_PREFIX = '/pet';
 /** 不同扩展名对应的 Content-Type 映射 */
 const MIME = {
   '.webm': 'video/webm',
+  '.webp': 'image/webp',
   '.mp4': 'video/mp4',
+  '.gif': 'image/gif',
   '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',
 };
@@ -72,10 +74,16 @@ function resolveAsset(root, rel) {
  * @param config - 本行的配置（来自 patch 树）
  */
 function apply(ctx, config) {
-  // 两个资源根：
-  // - thumbRoot：插件包内 assets/thumb/（360×360 播放变体，随包发布，一定存在）
-  // - fullRoot ：$DSH_HOME/pet-assets/（原始母版，需手动下载，可能不存在）
+  // 资源根：
+  // - hdRoot     ：插件包内 assets/hd/（360×202，24fps 满帧率，零残影高清透明动图）
+  // - webpRoot   ：插件包内 assets/webp/（640×360 WebP 动图）
+  // - thumbRoot  ：插件包内 assets/thumb/（360×360 WebM 视频变体）
+  // - previewRoot：插件包内 assets/preview/（220×220 预览 GIF 动图变体）
+  // - fullRoot   ：$DSH_HOME/pet-assets/（原始母版，需手动下载）
+  const hdRoot = join(PACKAGE_ROOT, 'assets', 'hd');
+  const webpRoot = join(PACKAGE_ROOT, 'assets', 'webp');
   const thumbRoot = join(PACKAGE_ROOT, 'assets', 'thumb');
+  const previewRoot = join(PACKAGE_ROOT, 'assets', 'preview');
   const fullRoot = config.fullRoot ?? join(resolveDshHome(), 'pet-assets');
 
   // ctx.effect 包裹：插件卸载时自动注销路由（官方生命周期管理）
@@ -86,16 +94,31 @@ function apply(ctx, config) {
       const url = new URL(req.url ?? '/', 'http://localhost');
       // 去掉 /pet/ 前缀并 URL 解码（中文文件名是编码后的）
       const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
-      // 第一段是 scope：thumb 或 full
+
+      // 诊断日志上报接口
+      if (req.method === 'POST' && rest === 'debug-log') {
+        let body = '';
+        for await (const chunk of req) {
+          body += chunk;
+        }
+        try {
+          const entry = JSON.parse(body);
+          const line = `[${new Date().toLocaleTimeString()}] ${entry.type || 'LOG'}: ${entry.message || ''} ${entry.data ? JSON.stringify(entry.data) : ''}\n`;
+          appendFileSync('/tmp/pet-frontend.log', line);
+        } catch {}
+        res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
+        return;
+      }
+      // 第一段是 scope：hd, webp, thumb, preview 或 full
       const [scope, ...nameParts] = rest.split('/');
-      if (scope !== 'thumb' && scope !== 'full') {
+      if (scope !== 'hd' && scope !== 'webp' && scope !== 'thumb' && scope !== 'preview' && scope !== 'full') {
         res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
-        res.end('dsh-pet: expected /pet/{thumb|full}/<file>');
+        res.end('dsh-pet: expected /pet/{hd|webp|thumb|preview|full}/<file>');
         return;
       }
       // 剩余部分是文件名（可能含空格/中文，原样保留）
       const fileName = nameParts.join('/');
-      const root = scope === 'thumb' ? thumbRoot : fullRoot;
+      const root = scope === 'hd' ? hdRoot : (scope === 'webp' ? webpRoot : (scope === 'thumb' ? thumbRoot : (scope === 'preview' ? previewRoot : fullRoot)));
       // 防穿越校验
       const file = resolveAsset(root, fileName);
       if (file === undefined) {
@@ -111,22 +134,58 @@ function apply(ctx, config) {
           : 'dsh-pet: asset not found');
         return;
       }
-      // 按扩展名定 Content-Type，附 Content-Length（浏览器可显示进度）
+      // 跨域预检支持
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+          'access-control-allow-headers': 'Range, Content-Type',
+        });
+        res.end();
+        return;
+      }
+
+      // 按扩展名定 Content-Type，附 Content-Length 与 Range 分段支持
       const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
       const contentType = MIME[ext] ?? 'application/octet-stream';
       const { size } = await stat(file);
-      res.writeHead(200, {
-        'content-type': contentType,
-        'content-length': size,
-        // 缓存 1 小时：动画是静态文件，重复播放直接命中缓存
-        'cache-control': 'public, max-age=3600',
-      });
-      // 流式返回（大文件不占内存）
-      const stream = createReadStream(file);
-      stream.on('error', () => {
-        res.destroy();
-      });
-      stream.pipe(res);
+
+      const range = req.headers.range;
+      if (typeof range === 'string' && range.startsWith('bytes=')) {
+        const parts = range.slice(6).split('-');
+        const start = parseInt(parts[0], 10) || 0;
+        const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
+        const chunkSize = end - start + 1;
+
+        res.writeHead(206, {
+          'content-type': contentType,
+          'content-length': chunkSize,
+          'content-range': `bytes ${start}-${end}/${size}`,
+          'accept-ranges': 'bytes',
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+          'access-control-allow-headers': 'Range, Content-Type',
+          'cache-control': 'public, max-age=3600',
+        });
+
+        const stream = createReadStream(file, { start, end });
+        stream.on('error', () => res.destroy());
+        stream.pipe(res);
+      } else {
+        res.writeHead(200, {
+          'content-type': contentType,
+          'content-length': size,
+          'accept-ranges': 'bytes',
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+          'access-control-allow-headers': 'Range, Content-Type',
+          'cache-control': 'public, max-age=3600',
+        });
+
+        const stream = createReadStream(file);
+        stream.on('error', () => res.destroy());
+        stream.pipe(res);
+      }
     },
   }), 'dsh-pet: /pet asset route');
 }

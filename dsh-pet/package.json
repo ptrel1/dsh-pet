@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "A floating desktop pet for the DeepSeek Harness Web UI: idle breathing, occasional direction turns, random actions, and screen wandering.",
   "keywords": [
     "dsh",
@@ -51,6 +51,7 @@
   "files": [
     "lib",
     "assets/thumb",
+    "assets/webp",
     "cordis.patch.yml"
   ],
   "scripts": {
@@ -65,7 +66,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-runtime"
       ],
-      "platform": "web"
+      "platform": "web",
+      "immediately": true
     }
   },
   "peerDependencies": {

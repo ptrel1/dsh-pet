@@ -30,3 +30,8 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+node_modules/
+*.log
+/tmp/
+assets/hd/
