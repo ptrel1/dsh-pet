@@ -14,12 +14,12 @@ window.__ModuleLoader__.load({
 		const { useEffect, useRef, useState, useCallback, createElement: e } = React;
 
 		// ============================================================================
-		// 内联样式注入
+		// 内联样式注入（平滑抗锯齿插值 + GPU 硬件合成图层隔离）
 		// ============================================================================
 		const css = [
-			'.dsh-pet-root{position:fixed;z-index:99999;pointer-events:none;user-select:none;right:12px;bottom:0}',
-			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
-			'.dsh-pet-media{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;transition:opacity .2s ease;transform-origin:center}',
+			'.dsh-pet-root{position:fixed;z-index:99999;pointer-events:none;user-select:none;right:12px;bottom:0;transform:translateZ(0)}',
+			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none;transform:translateZ(0)}',
+			'.dsh-pet-media{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;transform-origin:center;will-change:opacity,transform;transform:translateZ(0);backface-visibility:hidden;image-rendering:auto}',
 			'.dsh-pet-hit{position:absolute;pointer-events:auto;cursor:grab;z-index:10}',
 			'.dsh-pet-hit.dragging{cursor:grabbing}',
 			'@media (prefers-reduced-motion: reduce){.dsh-pet-media{transition:none}}',
